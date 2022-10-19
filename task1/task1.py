@@ -3,9 +3,10 @@ import io
 
 import matplotlib.pyplot as plt
 from PIL import Image
+from numpy import histogram as hist
 
 
-# Конвертирование изображения в оттенки серого:
+# конвертирование изображения в оттенки серого:
 def convert_image(input_image):
     # сначала копируем исходное изображение
     output_image = input_image.copy()
@@ -31,11 +32,31 @@ def create_histogram(input_image):
             brightness = input_image.getpixel((x, y))
             data.append(brightness[0])
 
-    # собираем гистограмму
-    plt.hist(x=data, bins='auto')
+    # собираем массив гистограммы
+    hist_array = hist(data, 11)
+    local_min = []
+    local_min_values = []
+
+    # находим позиции локальных минимумов
+    for i in range(1, len(hist_array[0]) - 1):
+        if (hist_array[0][i] < hist_array[0][i - 1]) & (hist_array[0][i] < hist_array[0][i + 1]):
+            local_min.append(i)
+
+    # находим промежутки локальных минимумов и берем середину промежутка как локальный минимум
+    for i in local_min:
+        local_min_values.append(int((hist_array[1][i] + hist_array[1][i + 1]) / 2))
+
+    # записываем данные в .csv файл
+    with open('output/histogram.csv', 'w+') as hist_text:
+        writer = csv.writer(hist_text)
+        writer.writerow(local_min_values)
+        writer.writerow(hist_array)
+
+    # собираем графическую гистограмму
+    plt.hist(x=data, bins=11)
     plt.grid(axis='y', alpha=0.75)
-    plt.xlabel('Частота')
-    plt.ylabel('Яркость')
+    plt.xlabel('Яркость')
+    plt.ylabel('Частота')
 
     # сохраняем гистограмму во временный буфер и затем открываем как PIL-объект
     img_buf = io.BytesIO()
@@ -50,34 +71,53 @@ def swap_color(input_image):
     # копируем входное изображение
     output_image = input_image.copy()
 
+    # читаем массив локальных минимумов из файла
+    with open('output/histogram.csv', 'r') as hist_text:
+        reader = csv.reader(hist_text)
+        for row in reader:
+            threshold = row
+            break
+
     # обходим пиксели
     for x in range(output_image.width):
         for y in range(output_image.height):
-            # из гистограммы выяснили, что первая область
-            # однородности начинается на значении 0, а заканчивается на 25,
-            # поэтому все пиксели с яркостью не более 25 красим в красный
+            # из массива с локальными минимумами берем первый
+            # и используем как порог
+            # красим все пиксели с яркостью не более пороговой в красный цвет
             brightness = output_image.getpixel((x, y))
-            if brightness[0] <= 25:
+            if brightness[0] <= int(threshold[0]):
                 output_image.putpixel((x, y), (255, 0, 0))
+
     return output_image
 
 
 # заполнение .csv файла
-def fill_csv(input_file, normal_image, grayscale_image):
+def fill_csv(input_file, input_image):
     # инициализируем csv-писателя
     writer = csv.writer(input_file)
 
-    # заполняем шапку
-    writer.writerow(['R', 'G', 'B', 'label'])
+    # читаем массив локальных минимумов из файла
+    with open('output/histogram.csv', 'r') as hist_text:
+        reader = csv.reader(hist_text)
+        for row in reader:
+            mins = row
+            break
 
     # обходим пиксели, из цветной версии изображения берем
     # значения RGB для каждого пикселя, а из Ч/Б - яркость
     # и заносим в .csv; RGB как R, G и B, а яркость как label
-    for x in range(normal_image.width):
-        for y in range(normal_image.height):
-            r, g, b = normal_image.getpixel((x, y))
-            brightness = grayscale_image.getpixel((x, y))
-            writer.writerow([r, g, b, brightness[0]])
+    for x in range(input_image.width):
+        row = []
+        for y in range(input_image.height):
+            r, g, b = input_image.getpixel((x, y))
+            label = len(mins)
+            for i in range(len(mins)):
+                if r <= int(mins[i]):
+                    label = i
+                    break
+
+            row.append([r, g, b, label])
+        writer.writerow(row)
 
     return input_file
 
@@ -97,4 +137,4 @@ swapped_colors.save("output/plane_red.png")
 
 # заполняем .csv
 with open('output/pixels.csv', 'w+') as file:
-    fill_csv(file, img, grayscale_img)
+    fill_csv(file, grayscale_img)
