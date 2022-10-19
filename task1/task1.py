@@ -19,9 +19,11 @@ def convert_image(input_image):
             brightness = int(0.299 * r + 0.587 * g + 0.114 * b)
             # получившимся значением яркости перезаписываем цвета пикселя
             output_image.putpixel((x, y), (brightness, brightness, brightness))
+
     return output_image
 
 
+# создание гистограммы и нахождение локальных минимумов
 def create_histogram(input_image):
     # инициализируем пустой массив для данных гистограммы
     data = []
